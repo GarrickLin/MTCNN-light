@@ -3,6 +3,8 @@
 #include "pBox.h"
 
 using namespace cv;
+using std::cout;
+using std::endl;
 
 class Pnet
 {
@@ -413,7 +415,7 @@ void Rnet::RnetImage2MatrixInit(struct pBox *pbox){
     pbox->width = 24;
     
     pbox->pdata = (mydataFmt *)malloc(pbox->channel*pbox->height*pbox->width*sizeof(mydataFmt));
-    if(pbox->pdata==NULL)cout<<"the image2MatrixInit is failed!!"<<endl;
+    if(pbox->pdata==NULL) cout<<"the image2MatrixInit is failed!!"<<endl;
     memset(pbox->pdata, 0, pbox->channel*pbox->height*pbox->width*sizeof(mydataFmt));
 }
 void Rnet::run(Mat &image){
@@ -577,7 +579,7 @@ void Onet::OnetImage2MatrixInit(struct pBox *pbox){
     pbox->width = 48;
     
     pbox->pdata = (mydataFmt *)malloc(pbox->channel*pbox->height*pbox->width*sizeof(mydataFmt));
-    if(pbox->pdata==NULL)cout<<"the image2MatrixInit is failed!!"<<endl;
+    if(pbox->pdata==NULL) cout<<"the image2MatrixInit is failed!!"<<endl;
     memset(pbox->pdata, 0, pbox->channel*pbox->height*pbox->width*sizeof(mydataFmt));
 }
 void Onet::run(Mat &image){

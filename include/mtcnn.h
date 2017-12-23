@@ -3,7 +3,7 @@
 #include <memory>
 #include <vector>
 #include <opencv2/core.hpp>
-#include "pBox.h"
+#include "bbox.h"
 
 using cv::Mat;
 using std::vector;

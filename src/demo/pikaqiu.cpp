@@ -1,7 +1,9 @@
+#include <iostream>
+#include <time.h>
 #include <opencv2/highgui.hpp>
 #include "mtcnn.h"
-#include <time.h>
 using namespace cv;
+using namespace std;
 
 #if 0
 int main()
