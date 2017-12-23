@@ -3,8 +3,7 @@
 //date 2017.5.21,20:27
 #ifndef NETWORK_H
 #define NETWORK_H
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/highgui/highgui.hpp"
+#include <opencv2/imgproc.hpp>
 #include <algorithm>
 #include <stdlib.h>
 #include <memory.h>
@@ -14,7 +13,8 @@
 #include <string>
 #include <math.h>
 #include "pBox.h"
-using namespace cv;
+
+using cv::Mat;
 
 void addbias(struct pBox *pbox, mydataFmt *pbias);
 void image2Matrix(const Mat &image, const struct pBox *pbox);

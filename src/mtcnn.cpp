@@ -1,4 +1,162 @@
 #include "mtcnn.h"
+#include "network.h"
+#include "pBox.h"
+
+using namespace cv;
+
+class Pnet
+{
+public:
+	Pnet();
+	~Pnet();
+	void run(Mat &image, float scale);
+
+	float nms_threshold;
+	mydataFmt Pthreshold;
+	bool firstFlag;
+	vector<struct Bbox> boundingBox_;
+	vector<orderScore> bboxScore_;
+private:
+	//the image for mxnet conv
+	struct pBox *rgb;
+	struct pBox *conv1_matrix;
+	//the 1th layer's out conv
+	struct pBox *conv1;
+	struct pBox *maxPooling1;
+	struct pBox *maxPooling_matrix;
+	//the 3th layer's out
+	struct pBox *conv2;
+	struct pBox *conv3_matrix;
+	//the 4th layer's out   out
+	struct pBox *conv3;
+	struct pBox *score_matrix;
+	//the 4th layer's out   out
+	struct pBox *score_;
+	//the 4th layer's out   out
+	struct pBox *location_matrix;
+	struct pBox *location_;
+
+	//Weight
+	struct Weight *conv1_wb;
+	struct pRelu *prelu_gmma1;
+	struct Weight *conv2_wb;
+	struct pRelu *prelu_gmma2;
+	struct Weight *conv3_wb;
+	struct pRelu *prelu_gmma3;
+	struct Weight *conv4c1_wb;
+	struct Weight *conv4c2_wb;
+
+	void generateBbox(const struct pBox *score, const struct pBox *location, mydataFmt scale);
+};
+
+class Rnet
+{
+public:
+	Rnet();
+	~Rnet();
+	float Rthreshold;
+	void run(Mat &image);
+	struct pBox *score_;
+	struct pBox *location_;
+private:
+	struct pBox *rgb;
+
+	struct pBox *conv1_matrix;
+	struct pBox *conv1_out;
+	struct pBox *pooling1_out;
+
+	struct pBox *conv2_matrix;
+	struct pBox *conv2_out;
+	struct pBox *pooling2_out;
+
+	struct pBox *conv3_matrix;
+	struct pBox *conv3_out;
+
+	struct pBox *fc4_out;
+
+	//Weight
+	struct Weight *conv1_wb;
+	struct pRelu *prelu_gmma1;
+	struct Weight *conv2_wb;
+	struct pRelu *prelu_gmma2;
+	struct Weight *conv3_wb;
+	struct pRelu *prelu_gmma3;
+	struct Weight *fc4_wb;
+	struct pRelu *prelu_gmma4;
+	struct Weight *score_wb;
+	struct Weight *location_wb;
+
+	void RnetImage2MatrixInit(struct pBox *pbox);
+};
+
+class Onet
+{
+public:
+	Onet();
+	~Onet();
+	void run(Mat &image);
+	float Othreshold;
+	struct pBox *score_;
+	struct pBox *location_;
+	struct pBox *keyPoint_;
+private:
+	struct pBox *rgb;
+	struct pBox *conv1_matrix;
+	struct pBox *conv1_out;
+	struct pBox *pooling1_out;
+
+	struct pBox *conv2_matrix;
+	struct pBox *conv2_out;
+	struct pBox *pooling2_out;
+
+	struct pBox *conv3_matrix;
+	struct pBox *conv3_out;
+	struct pBox *pooling3_out;
+
+	struct pBox *conv4_matrix;
+	struct pBox *conv4_out;
+
+	struct pBox *fc5_out;
+
+	//Weight
+	struct Weight *conv1_wb;
+	struct pRelu *prelu_gmma1;
+	struct Weight *conv2_wb;
+	struct pRelu *prelu_gmma2;
+	struct Weight *conv3_wb;
+	struct pRelu *prelu_gmma3;
+	struct Weight *conv4_wb;
+	struct pRelu *prelu_gmma4;
+	struct Weight *fc5_wb;
+	struct pRelu *prelu_gmma5;
+	struct Weight *score_wb;
+	struct Weight *location_wb;
+	struct Weight *keyPoint_wb;
+	void OnetImage2MatrixInit(struct pBox *pbox);
+};
+
+class mtcnn::impl
+{
+public:
+	impl(int row, int col, int minsize = 60);
+	~impl();
+	void findFace(Mat &image);
+	int detectFace(const Mat &image, vector<Bbox>& facebox);
+	int regressFace(const Mat &image, vector<Bbox>& facebox);
+private:
+	Mat reImage;
+	float nms_threshold[3];
+	vector<float> scales_;
+	Pnet *simpleFace_;
+	vector<struct Bbox> firstBbox_;
+	vector<struct orderScore> firstOrderScore_;
+	Rnet refineNet;
+	vector<struct Bbox> secondBbox_;
+	vector<struct orderScore> secondBboxScore_;
+	Onet outNet;
+	vector<struct Bbox> thirdBbox_;
+	vector<struct orderScore> thirdBboxScore_;
+};
 
 Pnet::Pnet(){
     Pthreshold = 0.6;
@@ -469,14 +627,13 @@ void Onet::run(Mat &image){
 }
 
 
-mtcnn::mtcnn(int row, int col){
+mtcnn::impl::impl(int row, int col, int minsize){
     nms_threshold[0] = 0.7;
     nms_threshold[1] = 0.7;
     nms_threshold[2] = 0.7;
-
+	minsize = std::max(minsize, 12);
     float minl = row>col?col:row;
     int MIN_DET_SIZE = 12;
-    int minsize = 60;
     float m = (float)MIN_DET_SIZE/minsize;
     minl *= m;
     float factor = 0.709;
@@ -492,8 +649,7 @@ mtcnn::mtcnn(int row, int col){
     int count = 0;
     for (vector<float>::iterator it = scales_.begin(); it != scales_.end(); it++){
         if (*it > 1){
-            cout << "the minsize is too small" << endl;
-            while (1);
+			throw std::invalid_argument("the minsize is too small");
         }
         if (*it < (MIN_DET_SIZE / minside)){
             scales_.resize(count);
@@ -504,11 +660,11 @@ mtcnn::mtcnn(int row, int col){
     simpleFace_ = new Pnet[scales_.size()];
 }
 
-mtcnn::~mtcnn(){
+mtcnn::impl::~impl(){
     delete []simpleFace_;
 }
 
-void mtcnn::findFace(Mat &image){
+void mtcnn::impl::findFace(Mat &image){
     struct orderScore order;
     int count = 0;
 	if (image.empty())
@@ -621,4 +777,200 @@ void mtcnn::findFace(Mat &image){
     secondBboxScore_.clear();
     thirdBbox_.clear();
     thirdBboxScore_.clear();
+}
+
+
+int mtcnn::impl::detectFace(const Mat &image, vector<struct Bbox>& facebox){
+	facebox.clear();
+	if (image.empty())
+		return 0;
+	struct orderScore order;
+	int count = 0;
+	for (size_t i = 0; i < scales_.size(); i++) {
+		int changedH = (int)ceil(image.rows*scales_.at(i));
+		int changedW = (int)ceil(image.cols*scales_.at(i));
+		resize(image, reImage, Size(changedW, changedH), 0, 0, cv::INTER_LINEAR);
+		simpleFace_[i].run(reImage, scales_.at(i));
+		nms(simpleFace_[i].boundingBox_, simpleFace_[i].bboxScore_, simpleFace_[i].nms_threshold);
+
+		for (vector<struct Bbox>::iterator it = simpleFace_[i].boundingBox_.begin(); it != simpleFace_[i].boundingBox_.end(); it++){
+			if ((*it).exist){
+				firstBbox_.push_back(*it);
+				order.score = (*it).score;
+				order.oriOrder = count;
+				firstOrderScore_.push_back(order);
+				count++;
+			}
+		}
+		simpleFace_[i].bboxScore_.clear();
+		simpleFace_[i].boundingBox_.clear();
+	}
+	//the first stage's nms
+	if (count<1)
+		return count;
+	nms(firstBbox_, firstOrderScore_, nms_threshold[0]);
+	refineAndSquareBbox(firstBbox_, image.rows, image.cols);
+
+	//second stage
+	count = 0;
+	for (vector<struct Bbox>::iterator it = firstBbox_.begin(); it != firstBbox_.end(); it++){
+		if ((*it).exist){
+			Rect temp((*it).y1, (*it).x1, (*it).y2 - (*it).y1, (*it).x2 - (*it).x1);
+			Mat secImage;
+			if (0 <= temp.x && temp.x < temp.x + temp.width && temp.x + temp.width <= image.cols &&
+				0 <= temp.y && temp.y<temp.y + temp.height && temp.y + temp.height <= image.rows){
+				resize(image(temp), secImage, Size(24, 24), 0, 0, cv::INTER_LINEAR);
+			}
+			else{
+				continue;
+			}
+			refineNet.run(secImage);
+			if (*(refineNet.score_->pdata + 1)>refineNet.Rthreshold){
+				memcpy(it->regreCoord, refineNet.location_->pdata, 4 * sizeof(mydataFmt));
+				it->area = (it->x2 - it->x1)*(it->y2 - it->y1);
+				it->score = *(refineNet.score_->pdata + 1);
+				secondBbox_.push_back(*it);
+				order.score = it->score;
+				order.oriOrder = count++;
+				secondBboxScore_.push_back(order);
+			}
+			else{
+				(*it).exist = false;
+			}
+		}
+	}
+	if (count<1)
+		return count;
+	nms(secondBbox_, secondBboxScore_, nms_threshold[1]);
+	refineAndSquareBbox(secondBbox_, image.rows, image.cols);
+
+	//third stage 
+	count = 0;
+	for (vector<struct Bbox>::iterator it = secondBbox_.begin(); it != secondBbox_.end(); it++){
+		if ((*it).exist){
+			Rect temp((*it).y1, (*it).x1, (*it).y2 - (*it).y1, (*it).x2 - (*it).x1);
+			Mat thirdImage;
+			if (0 <= temp.x && temp.x < temp.x + temp.width && temp.x + temp.width <= image.cols &&
+				0 <= temp.y && temp.y<temp.y + temp.height && temp.y + temp.height <= image.rows){
+				resize(image(temp), thirdImage, Size(48, 48), 0, 0, cv::INTER_LINEAR);
+			}
+			else{
+				continue;
+			}
+			outNet.run(thirdImage);
+			mydataFmt *pp = NULL;
+			if (*(outNet.score_->pdata + 1)>outNet.Othreshold){
+				memcpy(it->regreCoord, outNet.location_->pdata, 4 * sizeof(mydataFmt));
+				it->area = (it->x2 - it->x1)*(it->y2 - it->y1);
+				it->score = *(outNet.score_->pdata + 1);
+				pp = outNet.keyPoint_->pdata;
+				for (int num = 0; num < 5; num++){
+					(it->ppoint)[num] = it->y1 + (it->y2 - it->y1)*(*(pp + num));
+				}
+				for (int num = 0; num < 5; num++){
+					(it->ppoint)[num + 5] = it->x1 + (it->x2 - it->x1)*(*(pp + num + 5));
+				}
+				thirdBbox_.push_back(*it);
+				order.score = it->score;
+				order.oriOrder = count++;
+				thirdBboxScore_.push_back(order);
+			}
+			else{
+				it->exist = false;
+			}
+		}
+	}
+
+	if (count < 1)
+		return count;
+	refineAndSquareBbox(thirdBbox_, image.rows, image.cols);
+	nms(thirdBbox_, thirdBboxScore_, nms_threshold[2], "Min");
+	// set to output vector	
+	for (vector<struct Bbox>::iterator it = thirdBbox_.begin(); it != thirdBbox_.end(); it++){
+		if (it->exist){
+			facebox.push_back((*it));
+		}
+	}
+	firstBbox_.clear();
+	firstOrderScore_.clear();
+	secondBbox_.clear();
+	secondBboxScore_.clear();
+	thirdBbox_.clear();
+	thirdBboxScore_.clear();
+	return count;
+}
+
+int mtcnn::impl::regressFace(const Mat &image, vector<Bbox>& facebox){
+	struct orderScore order;
+	float regthreshold = 0.8;
+	//third stage 
+	int count = 0;
+	for (vector<struct Bbox>::iterator it = facebox.begin(); it != facebox.end(); it++){
+		if ((*it).exist){
+			Rect temp((*it).y1, (*it).x1, (*it).y2 - (*it).y1, (*it).x2 - (*it).x1);
+			Mat thirdImage;
+			if (0 <= temp.x && temp.x < temp.x + temp.width && temp.x + temp.width <= image.cols &&
+				0 <= temp.y && temp.y<temp.y + temp.height && temp.y + temp.height <= image.rows){
+				resize(image(temp), thirdImage, Size(48, 48), 0, 0, cv::INTER_LINEAR);
+			}
+			else{
+				continue;
+			}
+			outNet.run(thirdImage);
+			mydataFmt *pp = NULL;
+			if (*(outNet.score_->pdata + 1) > regthreshold){
+				memcpy(it->regreCoord, outNet.location_->pdata, 4 * sizeof(mydataFmt));
+				it->area = (it->x2 - it->x1)*(it->y2 - it->y1);
+				it->score = *(outNet.score_->pdata + 1);
+				pp = outNet.keyPoint_->pdata;
+				for (int num = 0; num < 5; num++){
+					(it->ppoint)[num] = it->y1 + (it->y2 - it->y1)*(*(pp + num));
+				}
+				for (int num = 0; num < 5; num++){
+					(it->ppoint)[num + 5] = it->x1 + (it->x2 - it->x1)*(*(pp + num + 5));
+				}
+				thirdBbox_.push_back(*it);
+				order.score = it->score;
+				order.oriOrder = count++;
+				thirdBboxScore_.push_back(order);
+			}
+			else{
+				it->exist = false;
+			}
+		}
+	}
+
+	if (count < 1) return count;
+	refineAndSquareBbox(thirdBbox_, image.rows, image.cols);
+	if (count > 1)
+		nms(thirdBbox_, thirdBboxScore_, nms_threshold[2], "Min");
+	// set to output vector	
+	facebox.clear();
+	for (vector<struct Bbox>::iterator it = thirdBbox_.begin(); it != thirdBbox_.end(); it++){
+		if (it->exist){
+			facebox.push_back((*it));
+		}
+	}
+	thirdBbox_.clear();
+	thirdBboxScore_.clear();
+	return count;
+}
+
+mtcnn::mtcnn(int row, int col, int minsize /* = 60 */){
+	pimpl = std::make_unique<impl>(row, col, minsize);
+}
+
+mtcnn::~mtcnn(){}
+
+void mtcnn::findFace(Mat &image){
+	pimpl->findFace(image);
+}
+
+int mtcnn::detectFace(const Mat &image, vector<Bbox>& facebox){
+
+	return pimpl->detectFace(image, facebox);
+}
+
+int mtcnn::regressFace(const Mat &image, vector<Bbox>& facebox){
+	return pimpl->regressFace(image, facebox);
 }

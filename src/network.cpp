@@ -1,5 +1,7 @@
 #include "network.h"
 
+using namespace cv;
+
 void addbias(struct pBox *pbox, mydataFmt *pbias){
     if (pbox->pdata == NULL){
         cout << "Relu feature is NULL!!" << endl;
