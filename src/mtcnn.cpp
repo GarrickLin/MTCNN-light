@@ -511,6 +511,8 @@ mtcnn::~mtcnn(){
 void mtcnn::findFace(Mat &image){
     struct orderScore order;
     int count = 0;
+	if (image.empty())
+		return;
     for (size_t i = 0; i < scales_.size(); i++) {
         int changedH = (int)ceil(image.rows*scales_.at(i));
         int changedW = (int)ceil(image.cols*scales_.at(i));
@@ -541,7 +543,13 @@ void mtcnn::findFace(Mat &image){
         if((*it).exist){
             Rect temp((*it).y1, (*it).x1, (*it).y2-(*it).y1, (*it).x2-(*it).x1);
             Mat secImage;
-            resize(image(temp), secImage, Size(24, 24), 0, 0, cv::INTER_LINEAR);
+			if (0 <= temp.x && temp.x<temp.x+temp.width && temp.x+temp.width<=image.cols &&
+				0 <= temp.y && temp.y<temp.y+temp.height && temp.y+temp.height<=image.rows){
+				resize(image(temp), secImage, Size(24, 24), 0, 0, cv::INTER_LINEAR);
+			}
+			else{
+				continue;
+			}
             refineNet.run(secImage);
             if(*(refineNet.score_->pdata+1)>refineNet.Rthreshold){
                 memcpy(it->regreCoord, refineNet.location_->pdata, 4*sizeof(mydataFmt));
@@ -567,7 +575,13 @@ void mtcnn::findFace(Mat &image){
         if((*it).exist){
             Rect temp((*it).y1, (*it).x1, (*it).y2-(*it).y1, (*it).x2-(*it).x1);
             Mat thirdImage;
-            resize(image(temp), thirdImage, Size(48, 48), 0, 0, cv::INTER_LINEAR);
+			if (0 <= temp.x && temp.x < temp.x + temp.width && temp.x + temp.width <= image.cols &&
+				0 <= temp.y && temp.y<temp.y + temp.height && temp.y + temp.height <= image.rows){
+				resize(image(temp), thirdImage, Size(48, 48), 0, 0, cv::INTER_LINEAR);
+			}
+			else{
+				continue;
+			}            
             outNet.run(thirdImage);
             mydataFmt *pp=NULL;
             if(*(outNet.score_->pdata+1)>outNet.Othreshold){
